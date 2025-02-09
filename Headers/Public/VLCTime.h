@@ -101,6 +101,11 @@ OBJC_VISIBLE
  * \return the int
  */
 @property (readonly) int intValue;
+/**
+ * the current time value as string value localized for the current environment including subseconds
+ * \return the NSString object
+ */
+@property (readonly) NSString * subSecondStringValue;
 
 /* Comparators */
 /**
@@ -114,7 +119,7 @@ OBJC_VISIBLE
  * \param object the VLCTime instance to compare against
  * \return a BOOL whether the instances are equal or not
  */
-- (BOOL)isEqual:(id)object;
+- (BOOL)isEqual:(nullable id)object;
 /**
  * Calculcate a unique hash for the current time instance
  * \return a hash value

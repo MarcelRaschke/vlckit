@@ -1,0 +1,64 @@
+From bdd00983611d38af55aeef50cae8eb9729f2d3e0 Mon Sep 17 00:00:00 2001
+From: Thomas Guillem <thomas@gllm.fr>
+Date: Fri, 16 Sep 2016 15:51:10 +0200
+Subject: [PATCH 06/11] http: add vlc_http_cookies_clear
+
+Clear all cookies without deleting the jar.
+---
+ include/vlc_http.h     | 1 +
+ src/libvlccore.sym     | 1 +
+ src/misc/httpcookies.c | 6 +++++-
+ 3 files changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/include/vlc_http.h b/include/vlc_http.h
+index b9b25e64b6..976f6e664a 100644
+--- a/include/vlc_http.h
++++ b/include/vlc_http.h
+@@ -70,6 +70,7 @@ VLC_API char *vlc_http_auth_FormatAuthorizationHeader
+ typedef struct vlc_http_cookie_jar_t vlc_http_cookie_jar_t;
+ 
+ VLC_API vlc_http_cookie_jar_t * vlc_http_cookies_new( void ) VLC_USED;
++VLC_API void vlc_http_cookies_clear( vlc_http_cookie_jar_t * p_jar );
+ VLC_API void vlc_http_cookies_destroy( vlc_http_cookie_jar_t * p_jar );
+ 
+ /**
+diff --git a/src/libvlccore.sym b/src/libvlccore.sym
+index 2a9b50c9a2..504aea770f 100644
+--- a/src/libvlccore.sym
++++ b/src/libvlccore.sym
+@@ -147,6 +147,7 @@ vlc_http_auth_ParseAuthenticationInfoHeader
+ vlc_http_auth_FormatAuthorizationHeader
+ vlc_http_cookies_new
+ vlc_http_cookies_destroy
++vlc_http_cookies_clear
+ vlc_http_cookies_store
+ vlc_http_cookies_fetch
+ httpd_ClientIP
+diff --git a/src/misc/httpcookies.c b/src/misc/httpcookies.c
+index 0b523bee81..a8abf02164 100644
+--- a/src/misc/httpcookies.c
++++ b/src/misc/httpcookies.c
+@@ -282,7 +282,7 @@ vlc_http_cookie_jar_t * vlc_http_cookies_new(void)
+     return jar;
+ }
+ 
+-void vlc_http_cookies_destroy( vlc_http_cookie_jar_t * p_jar )
++void vlc_http_cookies_clear( vlc_http_cookie_jar_t * p_jar )
+ {
+     if ( !p_jar )
+         return;
+@@ -291,7 +291,11 @@ void vlc_http_cookies_destroy( vlc_http_cookie_jar_t * p_jar )
+         cookie_destroy( vlc_array_item_at_index( &p_jar->cookies, i ) );
+ 
+     vlc_array_clear( &p_jar->cookies );
++}
+ 
++void vlc_http_cookies_destroy( vlc_http_cookie_jar_t * p_jar )
++{
++    vlc_http_cookies_clear( p_jar );
+     free( p_jar );
+ }
+ 
+-- 
+2.39.3 (Apple Git-146)
+

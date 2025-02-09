@@ -122,10 +122,6 @@ buildMobileVLCKit()
 
     local option="$1"
 
-    if [ "$DEPLOY_MOBILEVLCKIT" = "yes" ]; then
-        option=""
-    fi
-
     if ! $BUILD_MOBILEVLCKIT $option; then
         log "Error" "MobileVLCKit build failed"
         rm -fr "build/"
@@ -144,11 +140,11 @@ getVLCHashes()
 renamePackage()
 {
     if [ "$1" = "-m" ]; then
-        TARGET="MobileVLCKit"
+        TARGET="VLCKit-iOS"
     elif [ "$1" = "-t" ]; then
-        TARGET="TVVLCKit"
+        TARGET="VLCKit-tvOS"
     elif [ "$1" = "-x" ]; then
-        TARGET="VLCKit"
+        TARGET="VLCKit-macOS"
     fi
     getVLCHashes
 

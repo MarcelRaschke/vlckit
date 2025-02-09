@@ -1,0 +1,26 @@
+From 921194d40cc52dd346efa1d05adcfbdef2be952a Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Felix=20Paul=20K=C3=BChne?= <felix@feepk.net>
+Date: Tue, 16 Feb 2021 17:04:59 +0100
+Subject: [PATCH 09/11] contrib/ffmpeg: fix cross-compilation for macOS on
+ macOS
+
+---
+ contrib/src/ffmpeg/rules.mak | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/contrib/src/ffmpeg/rules.mak b/contrib/src/ffmpeg/rules.mak
+index 189833afe6..a9ccc645e7 100644
+--- a/contrib/src/ffmpeg/rules.mak
++++ b/contrib/src/ffmpeg/rules.mak
+@@ -157,6 +157,8 @@ FFMPEGCONF += --enable-parser='aac,aac_latm,ac3,adpcm,amr,aac_latm,ape,cook,dca,
+ FFMPEGCONF += --enable-demuxer='aac,ac3,adts,aiff,ape,asf,au,avi,caf,daud,dirac,dts,dv,ea,flac,flv,gsm,ivf,matroska,mmf,mov,mp3,mpeg,ogg,pcm,rm,sbc,sdp,shorten,voc,w64,wav,wv'
+ FFMPEGCONF += --enable-swresample
+ endif
++else
++FFMPEGCONF += --enable-pic --extra-ldflags="$(EXTRA_CFLAGS) -isysroot $(MACOSX_SDK)"
+ endif
+ endif
+ 
+-- 
+2.39.3 (Apple Git-146)
+

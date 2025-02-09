@@ -31,9 +31,13 @@
 #import <VLCMedia.h>
 #import <VLCAudio.h>
 #import <VLCMediaMetaData.h>
+#import <VLCAudioEqualizer.h>
+#import <VLCMediaPlayerTitleDescription.h>
 #if !TARGET_OS_TV
 #import <VLCRendererItem.h>
 #endif // !TARGET_OS_TV
+
+NS_ASSUME_NONNULL_BEGIN
 
 /**
  * Bridges functionality between libvlc and VLCMediaList implementation.
@@ -71,7 +75,7 @@
  * \param md LibVLC media descriptor pointer.
  * \return Newly created media instance using specified descriptor.
  */
-+ (id)mediaWithLibVLCMediaDescriptor:(void *)md;
++ (nullable instancetype)mediaWithLibVLCMediaDescriptor:(void *)md;
 
 /* Initializers */
 /**
@@ -79,9 +83,9 @@
  * \param md LibVLC media descriptor pointer.
  * \return Newly created media instance using specified descriptor.
  */
-- (id)initWithLibVLCMediaDescriptor:(void *)md;
+- (nullable instancetype)initWithLibVLCMediaDescriptor:(void *)md;
 
-+ (id)mediaWithMedia:(VLCMedia *)media andLibVLCOptions:(NSDictionary *)options;
++ (nullable instancetype)mediaWithMedia:(VLCMedia *)media andLibVLCOptions:(NSDictionary *)options;
 
 /**
  * Returns the receiver's internal media descriptor pointer.
@@ -186,38 +190,38 @@
 
 
 /**
- * Bridges functionality between libvlc and VLCMediaTracksInformation implementation.
+ * Bridges functionality between libvlc and VLCMediaTrack implementation.
  */
-@interface VLCMediaTracksInformation (LibVLCBridging)
+@interface VLCMediaTrack (LibVLCBridging)
 
-- (instancetype)initWithMediaTrack:(libvlc_media_track_t *)track;
+- (nullable instancetype)initWithMediaTrack:(libvlc_media_track_t *)track;
 
 @end
 
 /**
- * Bridges functionality between libvlc and VLCMediaTracksInformationAudio implementation.
+ * Bridges functionality between libvlc and VLCMediaAudioTrack implementation.
  */
-@interface VLCMediaTracksInformationAudio (LibVLCBridging)
+@interface VLCMediaAudioTrack (LibVLCBridging)
 
-- (instancetype)initWithAudioTrack:(libvlc_audio_track_t *)audio;
+- (nullable instancetype)initWithAudioTrack:(libvlc_audio_track_t *)audio;
 
 @end
 
 /**
- * Bridges functionality between libvlc and VLCMediaTracksInformationVideo implementation.
+ * Bridges functionality between libvlc and VLCMediaVideoTrack implementation.
  */
-@interface VLCMediaTracksInformationVideo (LibVLCBridging)
+@interface VLCMediaVideoTrack (LibVLCBridging)
 
-- (instancetype)initWithVideoTrack:(libvlc_video_track_t *)video;
+- (nullable instancetype)initWithVideoTrack:(libvlc_video_track_t *)video;
 
 @end
 
 /**
- * Bridges functionality between libvlc and VLCMediaTracksInformationText implementation.
+ * Bridges functionality between libvlc and VLCMediaTextTrack implementation.
  */
-@interface VLCMediaTracksInformationText (LibVLCBridging)
+@interface VLCMediaTextTrack (LibVLCBridging)
 
-- (instancetype)initWithSubtitleTrack:(libvlc_subtitle_track_t *)subtitle;
+- (nullable instancetype)initWithSubtitleTrack:(libvlc_subtitle_track_t *)subtitle;
 
 @end
 
@@ -228,6 +232,48 @@
 
 - (instancetype)initWithMedia:(VLCMedia *)media;
 
-- (void)handleMediaMetaChanged:(libvlc_meta_t)type;
+- (void)handleMediaMetaChanged:(const libvlc_meta_t)type;
 
 @end
+
+/**
+ * Bridges functionality between libvlc and VLCMediaPlayerTrack implementation.
+ */
+@interface VLCMediaPlayerTrack (LibVLCBridging)
+
+- (nullable instancetype)initWithMediaTrack:(libvlc_media_track_t *)track mediaPlayer:(VLCMediaPlayer *)mediaPlayer;
+
+- (nullable instancetype)initWithMediaTrack:(libvlc_media_track_t *)track NS_UNAVAILABLE;
+
+@end
+
+/**
+ * Bridges functionality between libvlc and VLCAudioEqualizer implementation.
+ */
+@interface VLCAudioEqualizer (LibVLCBridging)
+
+- (void)setMediaPlayer:(nullable VLCMediaPlayer *)mediaPlayer;
+
+@end
+
+/**
+ * Bridges functionality between libvlc and VLCMediaPlayerChapterDescription implementation.
+ */
+@interface VLCMediaPlayerChapterDescription (LibVLCBridging)
+
+- (instancetype)initWithMediaPlayer:(VLCMediaPlayer *)mediaPlayer titleIndex:(const int)titleIndex chapterDescription:(libvlc_chapter_description_t *)chapter_description chapterIndex:(const int)chapterIndex;
+
+@end
+
+/**
+ * Bridges functionality between libvlc and VLCMediaPlayerTitleDescription implementation.
+ */
+@interface VLCMediaPlayerTitleDescription (LibVLCBridging)
+
+- (instancetype)initWithMediaPlayer:(VLCMediaPlayer *)mediaPlayer titleDescription:(libvlc_title_description_t *)title_description titleIndex:(const int)titleIndex;
+
+- (void)navigate:(const libvlc_navigate_mode_t)navigate_mode;
+
+@end
+
+NS_ASSUME_NONNULL_END

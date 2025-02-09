@@ -1,6 +1,6 @@
 #!/bin/sh
 # Copyright (C) Pierre d'Herbemont, 2010
-# Copyright (C) Felix Paul Kühne, 2012-2021
+# Copyright (C) Felix Paul Kühne, 2012-2024
 
 set -e
 
@@ -17,7 +17,10 @@ SKIPLIBVLCCOMPILATION=no
 TVOS=no
 MACOS=no
 IOS=yes
+XROS=no
+WATCHOS=no
 BITCODE=no
+INCLUDE_ARMV7=no
 OSVERSIONMINCFLAG=iphoneos
 OSVERSIONMINLDFLAG=ios
 ROOT_DIR=empty
@@ -27,7 +30,7 @@ if [ -z "$MAKEFLAGS" ]; then
     MAKEFLAGS="-j$(sysctl -n machdep.cpu.core_count || nproc)";
 fi
 
-TESTEDHASH="69e22f29" # libvlc hash that this version of VLCKit is build on
+TESTEDHASH="17860384" # libvlc hash that this version of VLCKit is build on
 
 usage()
 {
@@ -44,9 +47,12 @@ OPTIONS
    -l       Skip libvlc compilation
    -t       Build for tvOS
    -x       Build for macOS / Mac OS X
+   -i       Build for xrOS / visionOS
+   -w       Build for watchOS
    -b       Enable bitcode
-   -a       Build framework for specific arch (all|i386|x86_64|armv7|aarch64)
+   -a       Build framework for specific arch (all|x86_64|armv7|aarch64)
    -e       External VLC source path
+   -7       Include optional ARMv7 slice (iOS only)
 EOF
 }
 
@@ -67,7 +73,7 @@ get_arch() {
 }
 
 is_simulator_arch() {
-    if [ "$1" = "i386" -o "$1" = "x86_64" ];then
+    if [ "$1" = "x86_64" ];then
         return 0
     else
         return 1
@@ -93,10 +99,10 @@ info()
 
 buildxcodeproj()
 {
-    local target="$2"
-    local PLATFORM="$3"
+    local PLATFORM="$2"
+    local PLATFORMNAME="$3"
 
-    info "Building $1 ($target, ${CONFIGURATION}, $PLATFORM)"
+    info "Building $1 (${CONFIGURATION}, $PLATFORM)"
 
     local architectures=""
     if [ "$FARCH" = "all" ];then
@@ -109,13 +115,27 @@ buildxcodeproj()
         fi
         if [ "$IOS" = "yes" ]; then
             if [ "$PLATFORM" = "iphonesimulator" ]; then
-                architectures="i386 x86_64 arm64"
+                architectures="x86_64 arm64"
             else
-                architectures="armv7 arm64"
+                if [ "$INCLUDE_ARMV7" = "yes" ]; then
+                    architectures="armv7 arm64"
+                else
+                    architectures="arm64"
+                fi
             fi
         fi
         if [ "$MACOS" = "yes" ]; then
             architectures="arm64 x86_64"
+        fi
+        if [ "$XROS" = "yes" ]; then
+            architectures="arm64"
+        fi
+        if [ "$WATCHOS" = "yes" ]; then
+            if [ "$PLATFORM" = "watchsimulator" ]; then
+                architectures="x86_64 arm64"
+            else
+                architectures="arm64_32"
+            fi
         fi
     else
         architectures=`get_actual_arch $FARCH`
@@ -142,19 +162,26 @@ buildxcodeproj()
         verboseflag="-verbose"
     fi
 
+    local deploymentTargetFlag=""
+    if [ "$XROS" != "yes" ]; then
+        deploymentTargetFlag="IPHONEOS_DEPLOYMENT_TARGET=${SDK_MIN}"
+    fi
+
     local defs="$GCC_PREPROCESSOR_DEFINITIONS"
 
     xcodebuild archive \
                -project "$1.xcodeproj" \
                -sdk $PLATFORM$SDK \
                -configuration ${CONFIGURATION} \
-               -scheme "$target" \
-               -archivePath build/"$target"-$PLATFORM$SDK.xcarchive \
+               -scheme "VLCKit" \
+               -destination "generic/platform=${PLATFORMNAME}" \
+               -archivePath build/VLCKit-$PLATFORM$SDK.xcarchive \
                ARCHS="${architectures}" \
-               IPHONEOS_DEPLOYMENT_TARGET=${SDK_MIN} \
+               ${deploymentTargetFlag} \
                ${bitcodeflag} \
                ${verboseflag} \
                SKIP_INSTALL=no \
+               ONLY_ACTIVE_ARCH=NO \
                > ${out}
 }
 
@@ -213,19 +240,31 @@ buildMobileKit() {
                 buildLibVLC "aarch64" "macosx"
                 buildLibVLC "x86_64" "macosx"
             fi
+            if [ "$XROS" = "yes" ]; then
+                info "building for xrOS"
+                buildLibVLC "aarch64" "xros"
+                buildLibVLC "aarch64" "xrsimulator"
+                # there is no xrSimulator for the Intel platform
+            fi
+            if [ "$WATCHOS" = "yes" ]; then
+                info "building for watchOS"
+                buildLibVLC "arm64_32" "watchos"
+                buildLibVLC "x86_64" "watchsimulator"
+                buildLibVLC "aarch64" "watchsimulator"
+            fi
             if [ "$IOS" = "yes" ]; then
                 if [ "$PLATFORM" = "iphonesimulator" ]; then
-                    buildLibVLC "i386" $PLATFORM
                     buildLibVLC "x86_64" $PLATFORM
                     buildLibVLC "aarch64" $PLATFORM
                 else
-                    buildLibVLC "armv7" $PLATFORM
+                    if [ "$INCLUDE_ARMV7" = "yes" ]; then
+                        buildLibVLC "armv7" $PLATFORM
+                    fi
                     buildLibVLC "aarch64" $PLATFORM
                 fi
             fi
         else
-            if [ "$FARCH" != "x86_64" -a "$FARCH" != "aarch64" -a "$FARCH" != "i386" \
-              -a "$FARCH" != "armv7" ];then
+            if [ "$FARCH" != "x86_64" -a "$FARCH" != "aarch64" -a "$FARCH" != "armv7" ];then
                 echo "*** Framework ARCH: ${FARCH} is invalid ***"
                 exit 1
             fi
@@ -239,6 +278,12 @@ buildMobileKit() {
                 if [ "$MACOS" = "yes" ]; then
                     PLATFORM="macosx"
                 fi
+                if [ "$XROS" = "yes" ]; then
+                    PLATFORM="xrsimulator"
+                fi
+                if [ "$WATCHOS" = "yes" ]; then
+                    PLATFORM="watchsimulator"
+                fi
             else
                 if [ "$TVOS" = "yes" ]; then
                     PLATFORM="appletvos"
@@ -248,6 +293,12 @@ buildMobileKit() {
                 fi
                 if [ "$MACOS" = "yes" ]; then
                     PLATFORM="macosx"
+                fi
+                if [ "$XROS" = "yes" ]; then
+                    PLATFORM="xros"
+                fi
+                if [ "$WATCHOS" = "yes" ]; then
+                    PLATFORM="watchos"
                 fi
             fi
 
@@ -259,6 +310,26 @@ buildMobileKit() {
 get_symbol()
 {
     echo "$1" | grep vlc_entry_$2|cut -d" " -f 3|sed 's/_vlc/vlc/'
+}
+
+function check_lipo {
+    os_style="$1"
+    os_arch="$2"
+    header=""
+    if [ -z "${os_style%%*simulator}" ]; then
+        header=vlc-plugins-${os_style%simulator}-simulator-${os_arch}.h
+    else
+        header=vlc-plugins-${os_style%os}-device-${os_arch}.h
+    fi
+
+    build_dir="${VLCROOT}/build-${os_style}-${os_arch}"
+    if [ -d "${build_dir}" ]; then
+        VLCSTATICLIBS+=" ${build_dir}/${VLCSTATICLIBRARYNAME}"
+        VLCSTATICMODULELIST="${build_dir}/static-lib/static-module-list.c"
+        cp $VLCSTATICMODULELIST $PROJECT_DIR/Headers/Internal/${header}
+    else
+        echo "Directory ${build_dir} doesn't exist"
+    fi
 }
 
 build_simulator_static_lib() {
@@ -280,29 +351,17 @@ build_simulator_static_lib() {
     VLCSTATICMODULELIST=""
 
     # brute-force test the available architectures we could lipo
-    if [ -d ${VLCROOT}/build-${OSSTYLE}simulator-x86_64 ];then
-        VLCSTATICLIBS+=" ${VLCROOT}/build-${OSSTYLE}simulator-x86_64/${VLCSTATICLIBRARYNAME}"
-        VLCSTATICMODULELIST="${VLCROOT}/build-${OSSTYLE}simulator-x86_64/static-lib/static-module-list.c"
-        cp $VLCSTATICMODULELIST $PROJECT_DIR/Headers/Internal/vlc-plugins-$OSSTYLE-simulator-x86_64.h
+    check_lipo "${OSSTYLE}simulator" x86_64
+    check_lipo "${OSSTYLE}simulator" arm64
+    # watch and XR is not -simulator suffixed in the script unfortunately.
+    check_lipo "${OSSTYLE}" arm64
+    check_lipo "${OSSTYLE}" x86_64
+
+    if [ ! -z "${VLCSTATICLIBS}" ]; then
+        spushd ${VLCROOT}
+        lipo $VLCSTATICLIBS -create -output install-$OSSTYLE-simulator/libvlc-simulator-static.a
+        spopd # VLCROOT
     fi
-    if [ -d ${VLCROOT}/build-${OSSTYLE}simulator-i386 ];then
-        VLCSTATICLIBS+=" ${VLCROOT}/build-${OSSTYLE}simulator-i386/${VLCSTATICLIBRARYNAME}"
-        VLCSTATICMODULELIST="${VLCROOT}/build-${OSSTYLE}simulator-i386/static-lib/static-module-list.c"
-        cp $VLCSTATICMODULELIST $PROJECT_DIR/Headers/Internal/vlc-plugins-$OSSTYLE-simulator-i386.h
-    fi
-    if [ -d ${VLCROOT}/build-${OSSTYLE}simulator-arm64 ];then
-        VLCSTATICLIBS+=" ${VLCROOT}/build-${OSSTYLE}simulator-arm64/${VLCSTATICLIBRARYNAME}"
-        VLCSTATICMODULELIST="${VLCROOT}/build-${OSSTYLE}simulator-arm64/static-lib/static-module-list.c"
-        cp $VLCSTATICMODULELIST $PROJECT_DIR/Headers/Internal/vlc-plugins-$OSSTYLE-simulator-arm64.h
-    fi
-
-    spushd ${VLCROOT}
-
-    lipo $VLCSTATICLIBS -create -output install-$OSSTYLE-simulator/libvlc-simulator-static.a
-
-
-
-    spopd # VLCROOT
 }
 
 build_device_static_lib() {
@@ -323,35 +382,25 @@ build_device_static_lib() {
     VLCSTATICMODULELIST=""
 
     # brute-force test the available architectures we could lipo
-    if [ -d ${VLCROOT}/build-${OSSTYLE}os-arm64 ];then
-        VLCSTATICLIBS+=" ${VLCROOT}/build-${OSSTYLE}os-arm64/${VLCSTATICLIBRARYNAME}"
-        VLCSTATICMODULELIST="${VLCROOT}/build-${OSSTYLE}os-arm64/static-lib/static-module-list.c"
-        cp $VLCSTATICMODULELIST $PROJECT_DIR/Headers/Internal/vlc-plugins-$OSSTYLE-device-arm64.h
+    check_lipo "${OSSTYLE}os" arm64
+    if [ "$IOS" = "yes" ]; then
+        check_lipo "${OSSTYLE}os" armv7
     fi
-    if [ -d ${VLCROOT}/build-${OSSTYLE}os-armv7 ];then
-        VLCSTATICLIBS+=" ${VLCROOT}/build-${OSSTYLE}os-armv7/${VLCSTATICLIBRARYNAME}"
-        VLCSTATICMODULELIST="${VLCROOT}/build-${OSSTYLE}os-armv7/static-lib/static-module-list.c"
-        cp $VLCSTATICMODULELIST $PROJECT_DIR/Headers/Internal/vlc-plugins-$OSSTYLE-device-armv7.h
+    if [ "$WATCHOS" = "yes" ]; then
+        check_lipo "${OSSTYLE}" arm64_32
     fi
-    if [ -d ${VLCROOT}/build-${OSSTYLE}-x86_64 ];then
-        VLCSTATICLIBS+=" ${VLCROOT}/build-${OSSTYLE}-x86_64/${VLCSTATICLIBRARYNAME}"
-        VLCSTATICMODULELIST="${VLCROOT}/build-${OSSTYLE}-x86_64/static-lib/static-module-list.c"
-        cp $VLCSTATICMODULELIST $PROJECT_DIR/Headers/Internal/vlc-plugins-$OSSTYLE-device-x86_64.h
-    fi
-    if [ -d ${VLCROOT}/build-${OSSTYLE}-arm64 ];then
-        VLCSTATICLIBS+=" ${VLCROOT}/build-${OSSTYLE}-arm64/${VLCSTATICLIBRARYNAME}"
-        VLCSTATICMODULELIST="${VLCROOT}/build-${OSSTYLE}-arm64/static-lib/static-module-list.c"
-        cp $VLCSTATICMODULELIST $PROJECT_DIR/Headers/Internal/vlc-plugins-$OSSTYLE-device-arm64.h
-    fi
+    # macosx and XR are not -os or -simulator suffixed in the script unfortunately.
+    check_lipo "${OSSTYLE}" x86_64
+    check_lipo "${OSSTYLE}" arm64
 
-    spushd ${VLCROOT}
-
-    lipo $VLCSTATICLIBS -create -output install-$OSSTYLE-device/libvlc-device-static.a
-
-    spopd # VLCROOT
+    if [ ! -z "${VLCSTATICLIBS}" ]; then
+        spushd ${VLCROOT}
+        lipo $VLCSTATICLIBS -create -output install-$OSSTYLE-device/libvlc-device-static.a
+        spopd # VLCROOT
+    fi
 }
 
-while getopts "hvsfbrxntlk:a:e:" OPTION
+while getopts "hvsfbrxiwntl7k:a:e:" OPTION
 do
      case $OPTION in
          h)
@@ -395,7 +444,6 @@ do
          t)
              TVOS=yes
              IOS=no
-             BITCODE=yes
              SDK_VERSION=`xcrun --sdk appletvos --show-sdk-version`
              SDK_MIN=10.2
              OSVERSIONMINCFLAG=tvos
@@ -412,8 +460,33 @@ do
              BUILD_DEVICE=yes
              BUILD_FRAMEWORK=yes
              ;;
+         i)
+             XROS=yes
+             IOS=no
+             BITCODE=no
+             SDK_VERSION=`xcrun --sdk xros --show-sdk-version`
+             SDK_MIN=1.0
+             OSVERSIONMINCFLAG=xros
+             OSVERSIONMINLDFLAG=xros
+             BUILD_DEVICE=yes
+             BUILD_FRAMEWORK=yes
+             ;;
+         w)
+             WATCHOS=yes
+             IOS=no
+             BITCODE=no
+             SDK_VERSION=`xcrun --sdk watchos --show-sdk-version`
+             SDK_MIN=7.4
+             OSVERSIONMINCFLAG=watchos
+             OSVERSIONMINLDFLAG=watchos
+             BUILD_DEVICE=yes
+             BUILD_FRAMEWORK=yes
+             ;;
          e)
              VLCROOT=$OPTARG
+             ;;
+         7)
+             INCLUDE_ARMV7=yes
              ;;
          ?)
              usage
@@ -428,7 +501,7 @@ if [ "$VERBOSE" = "yes" ]; then
    out="/dev/stdout"
 fi
 
-if [ "x$1" != "x" ]; then
+if [ "$1" != "" ]; then
     usage
     exit 1
 fi
@@ -496,7 +569,6 @@ if [ "$SKIPLIBVLCCOMPILATION" != "yes" ]; then
     spushd ${VLCROOT}/extras/tools
     ./bootstrap
     make
-    make .buildgas
     spopd #${VLCROOT}/extras/tools
 fi
 
@@ -514,6 +586,14 @@ if [ "$TVOS" = "yes" ]; then
     build_simulator_static_lib "appletv"
     build_device_static_lib "appletv"
 fi
+if [ "$XROS" = "yes" ]; then
+    build_simulator_static_lib "xros"
+    build_device_static_lib "xros"
+fi
+if [ "$WATCHOS" = "yes" ]; then
+    build_simulator_static_lib "watch"
+    build_device_static_lib "watchos"
+fi
 if [ "$MACOS" = "yes" ]; then
     build_device_static_lib "macosx"
 fi
@@ -524,51 +604,57 @@ fi
 
 info "all done"
 
-if [ "$BUILD_FRAMEWORK" != "no" ]; then
+if [ "$BUILD_FRAMEWORK" = "no" ]; then
+	exit 0
+fi
 if [ "$TVOS" = "yes" ]; then
-    info "Building TVVLCKit.xcframework"
+    info "Building VLCKit.xcframework for tvOS"
 
     frameworks=""
     platform=""
     if [ "$FARCH" = "all" ] || (! is_simulator_arch $FARCH);then
         platform="appletvos"
-        buildxcodeproj VLCKit "TVVLCKit" ${platform}
-        dsymfolder=$PROJECT_DIR/build/TVVLCKit-${platform}.xcarchive/dSYMs/TVVLCKit.framework.dSYM
-        bcsymbolmapfolder=$PROJECT_DIR/build/TVVLCKit-${platform}.xcarchive/BCSymbolMaps
-        spushd $bcsymbolmapfolder
-        for i in `ls *.bcsymbolmap`
-        do
-            bcsymbolmap=$bcsymbolmapfolder/$i
-        done
-        spopd
-        frameworks="$frameworks -framework TVVLCKit-${platform}.xcarchive/Products/Library/Frameworks/TVVLCKit.framework -debug-symbols $dsymfolder -debug-symbols $bcsymbolmap"
+        buildxcodeproj VLCKit ${platform} tvOS
+        dsymfolder=$PROJECT_DIR/build/VLCKit-${platform}.xcarchive/dSYMs/VLCKit.framework.dSYM
+        bcsymbolmapfolder=$PROJECT_DIR/build/VLCKit-${platform}.xcarchive/BCSymbolMaps
+        frameworks="$frameworks -framework VLCKit-${platform}.xcarchive/Products/Library/Frameworks/VLCKit.framework -debug-symbols $dsymfolder"
+        if [ -d ${bcsymbolmapfolder} ];then
+            info "Bitcode support found"
+            spushd $bcsymbolmapfolder
+            for i in `ls *.bcsymbolmap`
+            do
+                frameworks+=" -debug-symbols $bcsymbolmapfolder/$i"
+            done
+            spopd
+        fi
     fi
     if [ "$FARCH" = "all" ] || (is_simulator_arch $arch);then
         platform="appletvsimulator"
-        buildxcodeproj VLCKit "TVVLCKit" ${platform}
-        dsymfolder=$PROJECT_DIR/build/TVVLCKit-${platform}.xcarchive/dSYMs/TVVLCKit.framework.dSYM
-        frameworks="$frameworks -framework TVVLCKit-${platform}.xcarchive/Products/Library/Frameworks/TVVLCKit.framework -debug-symbols $dsymfolder"
+        buildxcodeproj VLCKit ${platform} "tvOS Simulator"
+        dsymfolder=$PROJECT_DIR/build/VLCKit-${platform}.xcarchive/dSYMs/VLCKit.framework.dSYM
+        frameworks="$frameworks -framework VLCKit-${platform}.xcarchive/Products/Library/Frameworks/VLCKit.framework -debug-symbols $dsymfolder"
     fi
 
     # Assumes both platforms were built currently
     spushd build
-    rm -rf TVVLCKit.xcframework
-    xcodebuild -create-xcframework $frameworks -output TVVLCKit.xcframework
+    rm -rf tvOS
+    mkdir tvOS
+    xcodebuild -create-xcframework $frameworks -output tvOS/VLCKit.xcframework
     spopd # build
 
-    info "Build of TVVLCKit.xcframework completed"
+    info "Build of VLCKit.xcframework for tvOS completed"
 fi
 if [ "$IOS" = "yes" ]; then
-    info "Building MobileVLCKit.xcframework"
+    info "Building VLCKit.xcframework for iOS"
 
     frameworks=""
     platform=""
     if [ "$FARCH" = "all" ] || (! is_simulator_arch $FARCH);then
         platform="iphoneos"
-        buildxcodeproj VLCKit "MobileVLCKit" ${platform}
-        dsymfolder=$PROJECT_DIR/build/MobileVLCKit-${platform}.xcarchive/dSYMs/MobileVLCKit.framework.dSYM
-        bcsymbolmapfolder=$PROJECT_DIR/build/MobileVLCKit-${platform}.xcarchive/BCSymbolMaps
-        frameworks="$frameworks -framework MobileVLCKit-${platform}.xcarchive/Products/Library/Frameworks/MobileVLCKit.framework -debug-symbols $dsymfolder"
+        buildxcodeproj VLCKit ${platform} iOS
+        dsymfolder=$PROJECT_DIR/build/VLCKit-${platform}.xcarchive/dSYMs/VLCKit.framework.dSYM
+        bcsymbolmapfolder=$PROJECT_DIR/build/VLCKit-${platform}.xcarchive/BCSymbolMaps
+        frameworks="$frameworks -framework VLCKit-${platform}.xcarchive/Products/Library/Frameworks/VLCKit.framework -debug-symbols $dsymfolder"
         if [ -d ${bcsymbolmapfolder} ];then
             info "Bitcode support found"
             spushd $bcsymbolmapfolder
@@ -581,32 +667,85 @@ if [ "$IOS" = "yes" ]; then
     fi
     if [ "$FARCH" = "all" ] || (is_simulator_arch $arch);then
         platform="iphonesimulator"
-        buildxcodeproj VLCKit "MobileVLCKit" ${platform}
-        dsymfolder=$PROJECT_DIR/build/MobileVLCKit-${platform}.xcarchive/dSYMs/MobileVLCKit.framework.dSYM
-        frameworks="$frameworks -framework MobileVLCKit-${platform}.xcarchive/Products/Library/Frameworks/MobileVLCKit.framework -debug-symbols $dsymfolder"
+        buildxcodeproj VLCKit ${platform} "iOS Simulator"
+        dsymfolder=$PROJECT_DIR/build/VLCKit-${platform}.xcarchive/dSYMs/VLCKit.framework.dSYM
+        frameworks="$frameworks -framework VLCKit-${platform}.xcarchive/Products/Library/Frameworks/VLCKit.framework -debug-symbols $dsymfolder"
     fi
 
     # Assumes both platforms were built currently
     spushd build
-    rm -rf MobileVLCKit.xcframework
-    xcodebuild -create-xcframework $frameworks -output MobileVLCKit.xcframework
+    rm -rf iOS
+    mkdir iOS
+    xcodebuild -create-xcframework $frameworks -output iOS/VLCKit.xcframework
     spopd # build
 
-    info "Build of MobileVLCKit.xcframework completed"
+    info "Build of VLCKit.xcframework for iOS completed"
 fi
+if [ "$XROS" = "yes" ]; then
+    info "Building VLCKit.xcframework for xrOS"
+
+    frameworks=""
+    platform=""
+    if [ "$FARCH" = "all" ] || (! is_simulator_arch $FARCH);then
+        platform="xros"
+        buildxcodeproj VLCKit ${platform} xrOS
+        dsymfolder=$PROJECT_DIR/build/VLCKit-${platform}.xcarchive/dSYMs/VLCKit.framework.dSYM
+        frameworks="$frameworks -framework VLCKit-${platform}.xcarchive/Products/Library/Frameworks/VLCKit.framework -debug-symbols $dsymfolder"
+    fi
+    if [ "$FARCH" = "all" ] || (is_simulator_arch $arch);then
+        platform="xrsimulator"
+        buildxcodeproj VLCKit ${platform} "xrOS Simulator"
+        dsymfolder=$PROJECT_DIR/build/VLCKit-${platform}.xcarchive/dSYMs/VLCKit.framework.dSYM
+        frameworks="$frameworks -framework VLCKit-${platform}.xcarchive/Products/Library/Frameworks/VLCKit.framework -debug-symbols $dsymfolder"
+    fi
+
+    # Assumes both platforms were built currently
+    spushd build
+    rm -rf xrOS
+    mkdir xrOS
+    xcodebuild -create-xcframework $frameworks -output xrOS/VLCKit.xcframework
+    spopd # build
+
+    info "Build of VLCKit.xcframework for xrOS completed"
 fi
-if [ "$BUILD_FRAMEWORK" != "no" ]; then
+if [ "$WATCHOS" = "yes" ]; then
+    info "Building VLCKit.xcframework for watchOS"
+
+    frameworks=""
+    platform=""
+    if [ "$FARCH" = "all" ] || (! is_simulator_arch $FARCH);then
+        platform="watchos"
+        buildxcodeproj VLCKit ${platform} watchOS
+        dsymfolder=$PROJECT_DIR/build/VLCKit-${platform}.xcarchive/dSYMs/VLCKit.framework.dSYM
+        frameworks="$frameworks -framework VLCKit-${platform}.xcarchive/Products/Library/Frameworks/VLCKit.framework -debug-symbols $dsymfolder"
+    fi
+    if [ "$FARCH" = "all" ] || (is_simulator_arch $arch);then
+        platform="watchsimulator"
+        buildxcodeproj VLCKit ${platform} "watchOS Simulator"
+        dsymfolder=$PROJECT_DIR/build/VLCKit-${platform}.xcarchive/dSYMs/VLCKit.framework.dSYM
+        frameworks="$frameworks -framework VLCKit-${platform}.xcarchive/Products/Library/Frameworks/VLCKit.framework -debug-symbols $dsymfolder"
+    fi
+
+    # Assumes both platforms were built currently
+    spushd build
+    rm -rf watchOS
+    mkdir watchOS
+    xcodebuild -create-xcframework $frameworks -output watchOS/VLCKit.xcframework
+    spopd # build
+
+    info "Build of VLCKit.xcframework for watchOS completed"
+fi
 if [ "$MACOS" = "yes" ]; then
     CURRENT_DIR=`pwd`
-    info "Building VLCKit.xcframework in ${CURRENT_DIR}"
+    info "Building VLCKit.xcframework for macOS in ${CURRENT_DIR}"
 
-    buildxcodeproj VLCKit "VLCKit" "macosx"
+    buildxcodeproj VLCKit "macosx" macOS
 
     spushd build
-    rm -rf VLCKit.xcframework
-    xcodebuild -create-xcframework -framework VLCKit-macosx.xcarchive/Products/Library/Frameworks/VLCKit.framework -debug-symbols $PROJECT_DIR/build/VLCKit-macosx.xcarchive/dSYMs/VLCKit.framework.dSYM -output VLCKit.xcframework
+    rm -rf macOS
+    mkdir macOS
+    xcodebuild -create-xcframework -framework VLCKit-macosx.xcarchive/Products/Library/Frameworks/VLCKit.framework -debug-symbols $PROJECT_DIR/build/VLCKit-macosx.xcarchive/dSYMs/VLCKit.framework.dSYM -output macOS/VLCKit.xcframework
     spopd # build
 
-    info "Build of VLCKit.xcframework completed"
-fi
+    info "Build of VLCKit.xcframework for macOS completed"
 fi

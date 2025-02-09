@@ -18,8 +18,12 @@ spopd()
     popd > /dev/null
 }
 
-MOBILE=no
-TV=no
+IOS=no
+TVOS=no
+MACOS=no
+XROS=no
+WATCHOS=no
+BUILDFORALL=no
 VERBOSE=no
 USEZIP=no
 USECOMPRESSEDARCHIVE=yes
@@ -39,15 +43,19 @@ Package VLCKit
 OPTIONS:
    -h            Show some help
    -v            Be verbose
-   -m            Package MobileVLCKit
-   -t            Package TVVLCKit
+   -x            Package VLCKit for macOS
+   -m            Package VLCKit for iOS
+   -t            Package VLCKit for tvOS
+   -i            Package VLCKit for xrOS
+   -w            Package VLCKit for watchOS
+   -a            Package VLCKit for all enabled OS
    -z            Use zip file format
    -d            Use dmg file format
 EOF
 
 }
 
-while getopts "hvmtz" OPTION
+while getopts "hvmxiwtza" OPTION
 do
      case $OPTION in
          h)
@@ -58,11 +66,22 @@ do
              VERBOSE=yes
              ;;
          m)
-             MOBILE=yes
+             IOS=yes
              ;;
          t)
-             MOBILE=yes
-             TV=yes
+             TVOS=yes
+             ;;
+         i)
+             XROS=yes
+             ;;
+         w)
+             WATCHOS=yes
+             ;;
+         x)
+             MACOS=yes
+             ;;
+         a)
+             BUILDFORALL=yes
              ;;
          z)
              USEZIP=yes
@@ -87,50 +106,111 @@ fi
 
 root=`dirname $0`/../
 
-DMGFOLDERNAME="VLCKit - binary package"
-DMGITEMNAME="VLCKit-REPLACEWITHVERSION"
+DMGFOLDERNAME=""
+DMGITEMNAME=""
 
-if [ "$USECOMPRESSEDARCHIVE" != "yes" ]; then
-    DMGFOLDERNAME="VLCKit-binary"
-fi
-
-if [ "$MOBILE" = "yes" ]; then
+if [ "$MACOS" = "yes" ]; then
     if [ "$USECOMPRESSEDARCHIVE" = "yes" ]; then
-        DMGFOLDERNAME="MobileVLCKit-binary"
+        DMGFOLDERNAME="VLCKit-macOS-binary"
     else
-        DMGFOLDERNAME="MobileVLCKit - binary package"
+        DMGFOLDERNAME="VLCKit for macOS - binary package"
     fi
-    DMGITEMNAME="MobileVLCKit-REPLACEWITHVERSION"
+    DMGITEMNAME="VLCKit-macOS-REPLACEWITHVERSION"
 fi
-if [ "$TV" = "yes" ]; then
+if [ "$IOS" = "yes" ]; then
     if [ "$USECOMPRESSEDARCHIVE" = "yes" ]; then
-        DMGFOLDERNAME="TVVLCKit-binary"
+        DMGFOLDERNAME="VLCKit-iOS-binary"
     else
-        DMGFOLDERNAME="TVVLCKit - binary package"
+        DMGFOLDERNAME="VLCKit for iOS - binary package"
     fi
-    DMGITEMNAME="TVVLCKit-REPLACEWITHVERSION"
+    DMGITEMNAME="VLCKit-iOS-REPLACEWITHVERSION"
+fi
+if [ "$TVOS" = "yes" ]; then
+    if [ "$USECOMPRESSEDARCHIVE" = "yes" ]; then
+        DMGFOLDERNAME="VLCKit-tvOS-binary"
+    else
+        DMGFOLDERNAME="VLCKit for tvOS - binary package"
+    fi
+    DMGITEMNAME="VLCKit-tvOS-REPLACEWITHVERSION"
+fi
+if [ "$XROS" = "yes" ]; then
+    if [ "$USECOMPRESSEDARCHIVE" = "yes" ]; then
+        DMGFOLDERNAME="VLCKit-xrOS-binary"
+    else
+        DMGFOLDERNAME="VLCKit for xrOS - binary package"
+    fi
+    DMGITEMNAME="VLCKit-xrOS-REPLACEWITHVERSION"
+fi
+if [ "$WATCHOS" = "yes" ]; then
+    if [ "$USECOMPRESSEDARCHIVE" = "yes" ]; then
+        DMGFOLDERNAME="VLCKit-watchOS-binary"
+    else
+        DMGFOLDERNAME="VLCKit for watchOS - binary package"
+    fi
+    DMGITEMNAME="VLCKit-watchOS-REPLACEWITHVERSION"
+fi
+if [ "$BUILDFORALL" = "yes" ]; then
+    if [ "$USECOMPRESSEDARCHIVE" = "yes" ]; then
+        DMGFOLDERNAME="VLCKit-binary"
+    else
+        DMGFOLDERNAME="VLCKit - binary package"
+    fi
+    DMGITEMNAME="VLCKit-REPLACEWITHVERSION"
 fi
 
 info "checking for distributable binary package"
 
+BUILD_DIR=`pwd`/build
+frameworks=""
+
 spushd ${root}
-if [ "$MOBILE" = "no" ]; then
-    if [ ! -e "build/VLCKit.xcframework" ]; then
-        info "VLCKit not found for distribution, creating... this will take long"
-        ./compileAndBuildVLCKit.sh -x
+if [ "$MACOS" = "yes" ]; then
+    if [ ! -e "build/macOS/VLCKit.xcframework" ]; then
+        info "VLCKit for macOS not found for distribution, creating... this will take long"
+        ./compileAndBuildVLCKit.sh -x -f
     fi
-else
-    if [ "$TV" = "yes" ]; then
-        if [ ! -e "build/TVVLCKit.xcframework" ]; then
-            info "TVVLCKit not found for distribution, creating... this will take long"
-            ./compileAndBuildVLCKit.sh -f -t
-        fi
-    else
-        if [ ! -e "build/MobileVLCKit.xcframework" ]; then
-            info "MobileVLCKit not found for distribution, creating... this will take long"
-            ./compileAndBuildVLCKit.sh -f
-        fi
+    dsymfolder=$BUILD_DIR/VLCKit-macosx.xcarchive/dSYMs/VLCKit.framework.dSYM
+    frameworks="$frameworks -framework $BUILD_DIR/VLCKit-macosx.xcarchive/Products/Library/Frameworks/VLCKit.framework -debug-symbols $dsymfolder"
+fi
+if [ "$TVOS" = "yes" ]; then
+    if [ ! -e "build/tvOS/VLCKit.xcframework" ]; then
+        info "VLCKit for tvOS not found for distribution, creating... this will take long"
+        ./compileAndBuildVLCKit.sh -f -t
     fi
+    dsymfolder=$BUILD_DIR/VLCKit-appletvsimulator.xcarchive/dSYMs/VLCKit.framework.dSYM
+    frameworks="$frameworks -framework $BUILD_DIR/VLCKit-appletvsimulator.xcarchive/Products/Library/Frameworks/VLCKit.framework -debug-symbols $dsymfolder"
+    dsymfolder=$BUILD_DIR/VLCKit-appletvos.xcarchive/dSYMs/VLCKit.framework.dSYM
+    frameworks="$frameworks -framework $BUILD_DIR/VLCKit-appletvos.xcarchive/Products/Library/Frameworks/VLCKit.framework -debug-symbols $dsymfolder"
+fi
+if [ "$IOS" = "yes" ]; then
+    if [ ! -e "build/iOS/VLCKit.xcframework" ]; then
+        info "VLCKit for iOS not found for distribution, creating... this will take long"
+        ./compileAndBuildVLCKit.sh -f
+    fi
+    dsymfolder=$BUILD_DIR/VLCKit-iphonesimulator.xcarchive/dSYMs/VLCKit.framework.dSYM
+    frameworks="$frameworks -framework $BUILD_DIR/VLCKit-iphonesimulator.xcarchive/Products/Library/Frameworks/VLCKit.framework -debug-symbols $dsymfolder"
+    dsymfolder=$BUILD_DIR/VLCKit-iphoneos.xcarchive/dSYMs/VLCKit.framework.dSYM
+    frameworks="$frameworks -framework $BUILD_DIR/VLCKit-iphoneos.xcarchive/Products/Library/Frameworks/VLCKit.framework -debug-symbols $dsymfolder"
+fi
+if [ "$XROS" = "yes" ]; then
+    if [ ! -e "build/xrOS/VLCKit.xcframework" ]; then
+        info "VLCKit for xrOS not found for distribution, creating... this will take long"
+        ./compileAndBuildVLCKit.sh -i -f
+    fi
+    dsymfolder=$BUILD_DIR/VLCKit-xrsimulator.xcarchive/dSYMs/VLCKit.framework.dSYM
+    frameworks="$frameworks -framework $BUILD_DIR/VLCKit-xrsimulator.xcarchive/Products/Library/Frameworks/VLCKit.framework -debug-symbols $dsymfolder"
+    dsymfolder=$BUILD_DIR/VLCKit-xros.xcarchive/dSYMs/VLCKit.framework.dSYM
+    frameworks="$frameworks -framework $BUILD_DIR/VLCKit-xros.xcarchive/Products/Library/Frameworks/VLCKit.framework -debug-symbols $dsymfolder"
+fi
+if [ "$WATCHOS" = "yes" ]; then
+    if [ ! -e "build/watchOS/VLCKit.xcframework" ]; then
+        info "VLCKit for xrOS not found for distribution, creating... this will take long"
+        ./compileAndBuildVLCKit.sh -w -f
+    fi
+    dsymfolder=$BUILD_DIR/VLCKit-watchsimulator.xcarchive/dSYMs/VLCKit.framework.dSYM
+    frameworks="$frameworks -framework $BUILD_DIR/VLCKit-watchsimulator.xcarchive/Products/Library/Frameworks/VLCKit.framework -debug-symbols $dsymfolder"
+    dsymfolder=$BUILD_DIR/VLCKit-watchos.xcarchive/dSYMs/VLCKit.framework.dSYM
+    frameworks="$frameworks -framework $BUILD_DIR/VLCKit-watchos.xcarchive/Products/Library/Frameworks/VLCKit.framework -debug-symbols $dsymfolder"
 fi
 
 info "Deleting previous data"
@@ -139,21 +219,32 @@ rm -rf "${DMGFOLDERNAME}"
 info "Collecting items"
 mkdir -p "${DMGFOLDERNAME}"
 mkdir -p "${DMGFOLDERNAME}/Sample Code"
-if [ "$MOBILE" = "no" ]; then
+if [ "$BUILDFORALL" = "yes" ]; then
+	PROJECT_DIR=`pwd`
+	rm -rf build/VLCKit.xcframework
+    xcodebuild -create-xcframework $frameworks -output build/VLCKit.xcframework
     cp -R build/VLCKit.xcframework "${DMGFOLDERNAME}"
-    cp -R Examples/macOS/* "${DMGFOLDERNAME}/Sample Code"
-    cp -R Documentation "${DMGFOLDERNAME}"
-    cp COPYING "${DMGFOLDERNAME}"
 else
-    if [ "$TV" = "yes" ]; then
-        cp -R build/TVVLCKit.xcframework "${DMGFOLDERNAME}"
-    else
-        cp -R build/MobileVLCKit.xcframework "${DMGFOLDERNAME}"
-        cp -R Examples/iOS/* "${DMGFOLDERNAME}/Sample Code"
-    fi
-    cp -R Documentation "${DMGFOLDERNAME}"
-    cp COPYING "${DMGFOLDERNAME}"
+if [ "$MACOS" = "yes" ]; then
+    cp -R build/macOS/VLCKit.xcframework "${DMGFOLDERNAME}"
+    cp -R Examples/macOS/* "${DMGFOLDERNAME}/Sample Code"
 fi
+if [ "$TVOS" = "yes" ]; then
+    cp -R build/tvOS/VLCKit.xcframework "${DMGFOLDERNAME}"
+fi
+if [ "$XROS" = "yes" ]; then
+    cp -R build/xrOS/VLCKit.xcframework "${DMGFOLDERNAME}"
+fi
+if [ "$WATCHOS" = "yes" ]; then
+    cp -R build/watchOS/VLCKit.xcframework "${DMGFOLDERNAME}"
+fi
+if [ "$IOS" = "yes" ]; then
+    cp -R build/iOS/VLCKit.xcframework "${DMGFOLDERNAME}"
+    cp -R Examples/iOS/* "${DMGFOLDERNAME}/Sample Code"
+fi
+fi
+cp -R Documentation "${DMGFOLDERNAME}"
+cp COPYING "${DMGFOLDERNAME}"
 cp NEWS "${DMGFOLDERNAME}"
 spushd "${DMGFOLDERNAME}"
 mv NEWS NEWS.txt
